@@ -1,26 +1,102 @@
-def enhance_prompt(user_request):
+def enhance_prompt(
+    user_request,
+    missing_components=None
+):
     """
-    Create a structured Version 1 enhanced prompt.
+    Create a structured enhanced prompt.
 
-    This is currently rule-based.
-    An LLM-powered enhancement system will be added later.
+    The enhancement adapts based on
+    prompt components that were not
+    detected during scoring.
     """
+
+    if missing_components is None:
+
+        missing_components = []
+
+    instructions = []
+
+    # ---------------------------------
+    # CONTEXT
+    # ---------------------------------
+
+    if "context" in missing_components:
+
+        instructions.append(
+            "If important context is missing, "
+            "make reasonable assumptions and "
+            "clearly state them."
+        )
+
+    # ---------------------------------
+    # ROLE
+    # ---------------------------------
+
+    if "role" in missing_components:
+
+        instructions.append(
+            "Use the most appropriate expertise "
+            "for the user's request."
+        )
+
+    # ---------------------------------
+    # TASK
+    # ---------------------------------
+
+    if "task" in missing_components:
+
+        instructions.append(
+            "First determine the user's intended "
+            "task before responding."
+        )
+
+    # ---------------------------------
+    # OUTPUT
+    # ---------------------------------
+
+    if "output" in missing_components:
+
+        instructions.append(
+            "Provide a complete and useful answer "
+            "that directly addresses the request."
+        )
+
+    # ---------------------------------
+    # FORMAT
+    # ---------------------------------
+
+    if "format" in missing_components:
+
+        instructions.append(
+            "Choose a clear format that best fits "
+            "the response."
+        )
+
+    # ---------------------------------
+    # BUILD PROMPT
+    # ---------------------------------
 
     enhanced_prompt = f"""
-You are an expert assistant.
-
 User Request:
 {user_request}
 
-Your task is to understand the user's request and provide
-the most helpful response possible.
+Instructions:
+"""
 
-If information is missing, make reasonable assumptions
-and clearly state those assumptions.
+    # Add dynamic instructions.
+    for instruction in instructions:
 
-Provide a clear and accurate answer.
+        enhanced_prompt += (
+            f"\n- {instruction}"
+        )
 
-Use a structured format with clear sections when appropriate.
+    # Always include this because it is
+    # the core purpose of the enhancer.
+    enhanced_prompt += """
+
+Focus on accurately understanding the
+user's intent and provide the most
+helpful response possible.
 """
 
     return enhanced_prompt.strip()

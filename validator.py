@@ -1,7 +1,35 @@
+import re
+
+
+def contains_keyword(text, keyword):
+    """
+    Check for a keyword or phrase using
+    word boundaries.
+
+    This prevents:
+    - "fix" matching "fixture"
+    - "make" matching "makeup"
+    """
+
+    pattern = (
+        r"\b"
+        + re.escape(keyword)
+        + r"\b"
+    )
+
+    return (
+        re.search(
+            pattern,
+            text
+        )
+        is not None
+    )
+
+
 def validate_request(user_request):
     """
-    Determine whether the user's request is understandable
-    enough to proceed with prompt enhancement.
+    Determine whether the user's request is
+    understandable enough to proceed.
 
     Returns:
         understanding_score
@@ -11,7 +39,6 @@ def validate_request(user_request):
 
     request = user_request.strip().lower()
 
-    understanding_score = 0
     clarification_questions = []
 
     # ---------------------------------
@@ -29,10 +56,12 @@ def validate_request(user_request):
         }
 
     # ---------------------------------
-    # BASIC REQUEST EXISTS
+    # DETECT PREVIOUS CLARIFICATIONS
     # ---------------------------------
 
-    understanding_score += 30
+    has_clarification = (
+        "clarification:" in request
+    )
 
     # ---------------------------------
     # IDENTIFY USER INTENT
@@ -61,46 +90,23 @@ def validate_request(user_request):
     ]
 
     has_action = any(
-        keyword in request
+        contains_keyword(
+            request,
+            keyword
+        )
         for keyword in action_keywords
     )
 
-    if has_action:
-
-        understanding_score += 30
-
-    else:
-
-        clarification_questions.append(
-            "What would you like me to help you do?"
-        )
-
     # ---------------------------------
-    # CHECK FOR SUBJECT / OBJECT
+    # WORD COUNT
     # ---------------------------------
 
-    word_count = len(request.split())
-
-    if word_count >= 3:
-
-        understanding_score += 20
-
-    else:
-
-        clarification_questions.append(
-            "What specifically would you like help with?"
-        )
-
-    # ---------------------------------
-    # CHECK FOR PREVIOUS CLARIFICATIONS
-    # ---------------------------------
-
-    has_clarification = (
-        "clarification:" in request
+    word_count = len(
+        request.split()
     )
 
     # ---------------------------------
-    # CREATION REQUESTS
+    # REQUEST TYPE DETECTION
     # ---------------------------------
 
     creation_keywords = [
@@ -110,82 +116,144 @@ def validate_request(user_request):
         "design"
     ]
 
-    if any(
-        keyword in request
+    purchase_keywords = [
+        "buy",
+        "buying",
+        "purchase",
+        "purchasing"
+    ]
+
+    recommendation_keywords = [
+        "recommend"
+    ]
+
+    explanation_keywords = [
+        "explain",
+        "teach"
+    ]
+
+    is_creation_request = any(
+        contains_keyword(
+            request,
+            keyword
+        )
         for keyword in creation_keywords
+    )
+
+    is_purchase_request = any(
+        contains_keyword(
+            request,
+            keyword
+        )
+        for keyword in purchase_keywords
+    )
+
+    is_recommendation_request = any(
+        contains_keyword(
+            request,
+            keyword
+        )
+        for keyword in recommendation_keywords
+    )
+
+    is_explanation_request = any(
+        contains_keyword(
+            request,
+            keyword
+        )
+        for keyword in explanation_keywords
+    )
+
+    # ---------------------------------
+    # VAGUE CREATION OBJECTS
+    # ---------------------------------
+
+    vague_creation_objects = [
+        "tracker",
+        "app",
+        "application",
+        "website",
+        "program",
+        "system",
+        "dashboard",
+        "file"
+    ]
+
+    has_vague_creation_object = any(
+        contains_keyword(
+            request,
+            item
+        )
+        for item in vague_creation_objects
+    )
+
+    # ---------------------------------
+    # IDENTIFY CLARIFICATION NEEDS
+    # ---------------------------------
+
+    if not has_action:
+
+        clarification_questions.append(
+            "What would you like me to help you do?"
+        )
+
+    if word_count < 3:
+
+        clarification_questions.append(
+            "What specifically would you like help with?"
+        )
+
+    if (
+        is_creation_request
+        and has_vague_creation_object
+        and not has_clarification
     ):
+
+        clarification_questions.append(
+            "What should it specifically do or be used for?"
+        )
+
+    if (
+        is_purchase_request
+        and not has_clarification
+    ):
+
+        clarification_questions.append(
+            "What will you primarily use it for?"
+        )
+
+    if (
+        is_recommendation_request
+        and not has_clarification
+    ):
+
+        clarification_questions.append(
+            "What will you primarily use it for?"
+        )
+
+    # ---------------------------------
+    # CALCULATE UNDERSTANDING SCORE
+    # ---------------------------------
+
+    understanding_score = 0
+
+    # A meaningful request exists.
+    understanding_score += 30
+
+    # System understands what the user
+    # generally wants to do.
+    if has_action:
+
+        understanding_score += 30
+
+    # The request contains enough detail
+    # beyond just one or two words.
+    if word_count >= 3:
 
         understanding_score += 20
 
-        if not has_clarification:
-
-            vague_creation_objects = [
-                "tracker",
-                "app",
-                "application",
-                "website",
-                "program",
-                "system",
-                "dashboard",
-                "file"
-            ]
-
-            if any(
-                item in request
-                for item in vague_creation_objects
-            ):
-
-                clarification_questions.append(
-                    "What should it specifically do or be used for?"
-                )
-
-    # ---------------------------------
-    # PURCHASE REQUESTS
-    # ---------------------------------
-
-    elif any(
-        keyword in request
-        for keyword in [
-            "buy",
-            "buying",
-            "purchase",
-            "purchasing"
-        ]
-    ):
-
-        understanding_score += 20
-
-        if not has_clarification:
-
-            clarification_questions.append(
-                "What will you primarily use it for?"
-            )
-
-    # ---------------------------------
-    # RECOMMENDATION REQUESTS
-    # ---------------------------------
-
-    elif (
-        "recommend" in request
-        or "best" in request
-    ):
-
-        understanding_score += 20
-
-        if not has_clarification:
-
-            clarification_questions.append(
-                "What will you primarily use it for?"
-            )
-
-    # ---------------------------------
-    # EXPLANATION REQUESTS
-    # ---------------------------------
-
-    elif (
-        "explain" in request
-        or "teach" in request
-    ):
+    # No clarification is currently needed.
+    if not clarification_questions:
 
         understanding_score += 20
 
@@ -198,16 +266,18 @@ def validate_request(user_request):
         100
     )
 
-    # ---------------------------------
-    # FINAL DECISION
-    # ---------------------------------
-
     needs_clarification = (
         len(clarification_questions) > 0
     )
 
     return {
         "understanding_score": understanding_score,
-        "needs_clarification": needs_clarification,
-        "clarification_questions": clarification_questions
+
+        "needs_clarification": (
+            needs_clarification
+        ),
+
+        "clarification_questions": (
+            clarification_questions
+        )
     }

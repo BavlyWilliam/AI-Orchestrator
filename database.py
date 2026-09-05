@@ -1,123 +1,186 @@
 import sqlite3
+
 from datetime import datetime
+from pathlib import Path
 
 
-DATABASE_NAME = "orchestrator.db"
+# =====================================
+# DATABASE PATH
+# =====================================
 
+BASE_DIRECTORY = Path(
+    __file__
+).resolve().parent
+
+DATABASE_PATH = (
+    BASE_DIRECTORY
+    / "orchestrator.db"
+)
+
+
+# =====================================
+# CONNECTION
+# =====================================
 
 def get_connection():
-    """Create and return a connection to the SQLite database."""
+    """
+    Create and return a connection to
+    the SQLite database.
+    """
 
-    connection = sqlite3.connect(DATABASE_NAME)
+    connection = sqlite3.connect(
+        DATABASE_PATH
+    )
 
-    # Enable foreign key support for this connection.
-    connection.execute("PRAGMA foreign_keys = ON")
+    connection.execute(
+        "PRAGMA foreign_keys = ON"
+    )
 
     return connection
 
 
+# =====================================
+# INITIALIZE DATABASE
+# =====================================
+
 def initialize_database():
     """
-    Create the database tables if they do not already exist.
+    Create required database tables and
+    add missing columns to existing
+    databases.
     """
 
-    connection = get_connection()
-    cursor = connection.cursor()
+    with get_connection() as connection:
 
-    # ---------------------------------
-    # REQUESTS TABLE
-    # ---------------------------------
+        cursor = connection.cursor()
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS requests (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            original_prompt TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            understanding_score INTEGER,
-            needs_clarification INTEGER,
-            prompt_score INTEGER,
-            enhanced_prompt TEXT,
-            status TEXT NOT NULL DEFAULT 'created'
-        )
-    """)
-
-    # ---------------------------------
-    # INTERACTIONS TABLE
-    # ---------------------------------
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS interactions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            request_id INTEGER NOT NULL,
-            interaction_type TEXT NOT NULL,
-            content TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-
-            FOREIGN KEY (request_id)
-                REFERENCES requests(id)
-                ON DELETE CASCADE
-        )
-    """)
-
-    # ---------------------------------
-    # HANDLE EXISTING DATABASES
-    # ---------------------------------
-
-    cursor.execute("""
-        PRAGMA table_info(requests)
-    """)
-
-    columns = cursor.fetchall()
-
-    column_names = [
-        column[1]
-        for column in columns
-    ]
-
-    if "status" not in column_names:
+        # =============================
+        # REQUESTS TABLE
+        # =============================
 
         cursor.execute("""
-            ALTER TABLE requests
-            ADD COLUMN status TEXT
-            DEFAULT 'created'
+            CREATE TABLE IF NOT EXISTS requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                original_prompt TEXT NOT NULL,
+                final_request TEXT,
+                created_at TEXT NOT NULL,
+
+                understanding_score INTEGER,
+                needs_clarification INTEGER,
+
+                prompt_score INTEGER,
+                enhanced_prompt TEXT,
+
+                task_category TEXT,
+
+                requires_ai_fallback INTEGER,
+
+                recommended_llm TEXT,
+                recommendation_reason TEXT,
+
+                status TEXT NOT NULL
+                DEFAULT 'created'
+            )
         """)
 
-    connection.commit()
-    connection.close()
+        # =============================
+        # INTERACTIONS TABLE
+        # =============================
 
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS interactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                request_id INTEGER NOT NULL,
+
+                interaction_type TEXT NOT NULL,
+
+                content TEXT NOT NULL,
+
+                created_at TEXT NOT NULL,
+
+                FOREIGN KEY (request_id)
+                    REFERENCES requests(id)
+                    ON DELETE CASCADE
+            )
+        """)
+
+        # =============================
+        # DATABASE MIGRATIONS
+        # =============================
+
+        cursor.execute(
+            "PRAGMA table_info(requests)"
+        )
+
+        existing_columns = {
+            column[1]
+            for column in cursor.fetchall()
+        }
+
+        required_columns = {
+            "final_request": "TEXT",
+            "task_category": "TEXT",
+            "requires_ai_fallback": "INTEGER",
+            "recommended_llm": "TEXT",
+            "recommendation_reason": "TEXT",
+            "status": "TEXT DEFAULT 'created'"
+        }
+
+        for (
+            column_name,
+            column_type
+        ) in required_columns.items():
+
+            if (
+                column_name
+                not in existing_columns
+            ):
+
+                cursor.execute(
+                    f"""
+                    ALTER TABLE requests
+                    ADD COLUMN {column_name}
+                    {column_type}
+                    """
+                )
+
+
+# =====================================
+# CREATE REQUEST
+# =====================================
 
 def create_request(original_prompt):
     """
-    Create a new request immediately.
+    Create a new request.
 
     Returns:
-        The ID of the newly created request.
+        int: The ID of the new request.
     """
 
-    connection = get_connection()
-    cursor = connection.cursor()
+    with get_connection() as connection:
 
-    cursor.execute("""
-        INSERT INTO requests (
+        cursor = connection.cursor()
+
+        cursor.execute("""
+            INSERT INTO requests (
+                original_prompt,
+                created_at,
+                status
+            )
+            VALUES (?, ?, ?)
+        """, (
             original_prompt,
-            created_at,
-            status
-        )
+            datetime.now().isoformat(),
+            "processing"
+        ))
 
-        VALUES (?, ?, ?)
-    """, (
-        original_prompt,
-        datetime.now().isoformat(),
-        "created"
-    ))
+        return cursor.lastrowid
 
-    request_id = cursor.lastrowid
 
-    connection.commit()
-    connection.close()
-
-    return request_id
-
+# =====================================
+# SAVE INTERACTION
+# =====================================
 
 def save_interaction(
     request_id,
@@ -125,37 +188,33 @@ def save_interaction(
     content
 ):
     """
-    Save an interaction related to a request.
-
-    Examples of interaction types:
-
-    - clarification_question
-    - clarification_answer
-    - cancellation
+    Save an interaction connected to
+    a request.
     """
 
-    connection = get_connection()
-    cursor = connection.cursor()
+    with get_connection() as connection:
 
-    cursor.execute("""
-        INSERT INTO interactions (
+        cursor = connection.cursor()
+
+        cursor.execute("""
+            INSERT INTO interactions (
+                request_id,
+                interaction_type,
+                content,
+                created_at
+            )
+            VALUES (?, ?, ?, ?)
+        """, (
             request_id,
             interaction_type,
             content,
-            created_at
-        )
+            datetime.now().isoformat()
+        ))
 
-        VALUES (?, ?, ?, ?)
-    """, (
-        request_id,
-        interaction_type,
-        content,
-        datetime.now().isoformat()
-    ))
 
-    connection.commit()
-    connection.close()
-
+# =====================================
+# UPDATE REQUEST
+# =====================================
 
 def update_request(
     request_id,
@@ -163,14 +222,18 @@ def update_request(
     needs_clarification=None,
     prompt_score=None,
     enhanced_prompt=None,
+    final_request=None,
+    task_category=None,
+    requires_ai_fallback=None,
+    recommended_llm=None,
+    recommendation_reason=None,
     status=None
 ):
     """
-    Update processing information for an existing request.
-    """
+    Update an existing request.
 
-    connection = get_connection()
-    cursor = connection.cursor()
+    Only provided values are updated.
+    """
 
     fields = []
     values = []
@@ -215,6 +278,56 @@ def update_request(
             enhanced_prompt
         )
 
+    if final_request is not None:
+
+        fields.append(
+            "final_request = ?"
+        )
+
+        values.append(
+            final_request
+        )
+
+    if task_category is not None:
+
+        fields.append(
+            "task_category = ?"
+        )
+
+        values.append(
+            task_category
+        )
+
+    if requires_ai_fallback is not None:
+
+        fields.append(
+            "requires_ai_fallback = ?"
+        )
+
+        values.append(
+            int(requires_ai_fallback)
+        )
+
+    if recommended_llm is not None:
+
+        fields.append(
+            "recommended_llm = ?"
+        )
+
+        values.append(
+            recommended_llm
+        )
+
+    if recommendation_reason is not None:
+
+        fields.append(
+            "recommendation_reason = ?"
+        )
+
+        values.append(
+            recommendation_reason
+        )
+
     if status is not None:
 
         fields.append(
@@ -225,16 +338,14 @@ def update_request(
             status
         )
 
-    # If nothing needs updating,
-    # stop the function.
-
+    # Nothing to update.
     if not fields:
-
-        connection.close()
 
         return
 
-    values.append(request_id)
+    values.append(
+        request_id
+    )
 
     query = f"""
         UPDATE requests
@@ -242,43 +353,42 @@ def update_request(
         WHERE id = ?
     """
 
-    cursor.execute(
-        query,
-        values
-    )
+    with get_connection() as connection:
 
-    connection.commit()
-    connection.close()
+        cursor = connection.cursor()
 
+        cursor.execute(
+            query,
+            values
+        )
+
+
+# =====================================
+# GET REQUEST INTERACTIONS
+# =====================================
 
 def get_request_interactions(request_id):
     """
-    Return all interactions related
-    to a specific request.
+    Get all interactions related to
+    one request.
     """
 
-    connection = get_connection()
-    cursor = connection.cursor()
+    with get_connection() as connection:
 
-    cursor.execute("""
-        SELECT
-            id,
+        cursor = connection.cursor()
+
+        cursor.execute("""
+            SELECT
+                id,
+                request_id,
+                interaction_type,
+                content,
+                created_at
+            FROM interactions
+            WHERE request_id = ?
+            ORDER BY id
+        """, (
             request_id,
-            interaction_type,
-            content,
-            created_at
+        ))
 
-        FROM interactions
-
-        WHERE request_id = ?
-
-        ORDER BY id
-    """, (
-        request_id,
-    ))
-
-    interactions = cursor.fetchall()
-
-    connection.close()
-
-    return interactions
+        return cursor.fetchall()
