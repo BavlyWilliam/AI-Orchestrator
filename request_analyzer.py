@@ -223,7 +223,7 @@ User input:
 """
 
     interaction = client.interactions.create(
-        model="gemini-3.6-flash",
+        model="gemini-3.1-flash-lite",
         input=analysis_prompt,
         response_format={
             "type": "text",
