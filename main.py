@@ -4,6 +4,20 @@ from prompt_enhancer import enhance_prompt
 from database import initialize_database, save_request
 
 
+EXIT_COMMANDS = {
+    "exit",
+    "quit",
+    "cancel",
+    "stop",
+    "no",
+    "nothing",
+    "never mind",
+    "nevermind",
+    "leave me alone",
+    "fuck off"
+}
+
+
 def get_user_request():
     """Ask the user for their original request."""
 
@@ -19,15 +33,30 @@ def get_user_request():
         print("\nPlease enter a request.\n")
 
 
+def is_exit_response(answer):
+    """
+    Check whether the user wants to stop
+    the clarification process.
+    """
+
+    return answer.strip().lower() in EXIT_COMMANDS
+
+
 def collect_clarifications(user_request):
     """
-    Ask clarification questions until the validator
-    determines that the request is clear enough.
+    Ask clarification questions until:
+
+    - The request is clear enough
+    - The user cancels
+    - The maximum number of attempts is reached
     """
 
     current_request = user_request
 
-    while True:
+    max_attempts = 3
+    attempt = 0
+
+    while attempt < max_attempts:
 
         validation_result = validate_request(
             current_request
@@ -40,17 +69,26 @@ def collect_clarifications(user_request):
             f"{validation_result['understanding_score']}/100"
         )
 
-        # If no clarification is needed,
-        # return the completed request.
-        if not validation_result["needs_clarification"]:
+        # ---------------------------------
+        # REQUEST IS CLEAR
+        # ---------------------------------
+
+        if not validation_result[
+            "needs_clarification"
+        ]:
 
             return current_request, validation_result
 
-        print("\nYour request needs clarification.")
+        # ---------------------------------
+        # REQUEST NEEDS CLARIFICATION
+        # ---------------------------------
+
+        print(
+            "\nYour request needs clarification."
+        )
 
         print("\nClarification Questions:")
 
-        # Ask every clarification question.
         for question in validation_result[
             "clarification_questions"
         ]:
@@ -59,14 +97,150 @@ def collect_clarifications(user_request):
                 f"\n{question}\n> "
             ).strip()
 
-            # Add the user's clarification
-            # to the existing request.
-            if answer:
+            # ---------------------------------
+            # USER CANCELS
+            # ---------------------------------
 
-                current_request += (
-                    f"\nClarification: {answer}"
+            if is_exit_response(answer):
+
+                print(
+                    "\nNo problem. Request cancelled."
                 )
 
+                return None, None
+
+            # ---------------------------------
+            # EMPTY ANSWER
+            # ---------------------------------
+
+            if not answer:
+
+                print(
+                    "\nNo answer was provided."
+                )
+
+                continue
+
+            # ---------------------------------
+            # ADD CLARIFICATION
+            # ---------------------------------
+
+            current_request += (
+                f"\nClarification: {answer}"
+            )
+
+        attempt += 1
+
         print(
-            "\nThank you. Analyzing your updated request..."
+            "\nThank you. "
+            "Analyzing your updated request..."
         )
+
+    # ---------------------------------
+    # MAXIMUM ATTEMPTS REACHED
+    # ---------------------------------
+
+    print(
+        "\nI still don't have enough information "
+        "to understand your request."
+    )
+
+    print(
+        "Please start again with a clearer request."
+    )
+
+    return None, None
+
+
+def main():
+
+    # ---------------------------------
+    # INITIALIZE DATABASE
+    # ---------------------------------
+
+    initialize_database()
+
+    # ---------------------------------
+    # GET ORIGINAL REQUEST
+    # ---------------------------------
+
+    original_request = get_user_request()
+
+    # ---------------------------------
+    # COLLECT CLARIFICATIONS
+    # ---------------------------------
+
+    final_request, validation_result = (
+        collect_clarifications(
+            original_request
+        )
+    )
+
+    # ---------------------------------
+    # STOP IF REQUEST WAS CANCELLED
+    # ---------------------------------
+
+    if final_request is None:
+
+        return
+
+    # ---------------------------------
+    # SCORE ORIGINAL PROMPT
+    # ---------------------------------
+
+    scoring_result = score_prompt(
+        original_request
+    )
+
+    print("\n--- Original Prompt Score ---")
+
+    print(
+        f"Total Score: "
+        f"{scoring_result['total_score']}/100"
+    )
+
+    for category, score in scoring_result[
+        "scores"
+    ].items():
+
+        print(
+            f"{category.capitalize()}: "
+            f"{score}/20"
+        )
+
+    # ---------------------------------
+    # ENHANCE PROMPT
+    # ---------------------------------
+
+    enhanced_prompt = enhance_prompt(
+        final_request
+    )
+
+    print("\n--- Enhanced Prompt ---\n")
+
+    print(enhanced_prompt)
+
+    # ---------------------------------
+    # SAVE REQUEST
+    # ---------------------------------
+
+    save_request(
+        original_prompt=original_request,
+        understanding_score=validation_result[
+            "understanding_score"
+        ],
+        needs_clarification=False,
+        prompt_score=scoring_result[
+            "total_score"
+        ],
+        enhanced_prompt=enhanced_prompt
+    )
+
+    print(
+        "\nRequest saved successfully "
+        "to the database."
+    )
+
+
+if __name__ == "__main__":
+    main()

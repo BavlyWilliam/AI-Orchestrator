@@ -29,18 +29,19 @@ def validate_request(user_request):
         }
 
     # ---------------------------------
-    # BASIC INTENTION
+    # BASIC REQUEST EXISTS
     # ---------------------------------
 
     understanding_score += 30
 
     # ---------------------------------
-    # IDENTIFY ACTION
+    # IDENTIFY USER INTENT
     # ---------------------------------
 
     action_keywords = [
         "create",
         "build",
+        "make",
         "write",
         "explain",
         "teach",
@@ -52,7 +53,11 @@ def validate_request(user_request):
         "fix",
         "design",
         "summarize",
-        "plan"
+        "plan",
+        "buy",
+        "buying",
+        "purchase",
+        "purchasing"
     ]
 
     has_action = any(
@@ -71,12 +76,12 @@ def validate_request(user_request):
         )
 
     # ---------------------------------
-    # IDENTIFY A SUBJECT / OBJECT
+    # CHECK FOR SUBJECT / OBJECT
     # ---------------------------------
 
-    words = request.split()
+    word_count = len(request.split())
 
-    if len(words) >= 3:
+    if word_count >= 3:
 
         understanding_score += 20
 
@@ -87,10 +92,16 @@ def validate_request(user_request):
         )
 
     # ---------------------------------
-    # TASK-SPECIFIC CLARIFICATION
+    # CHECK FOR PREVIOUS CLARIFICATIONS
     # ---------------------------------
 
-    # CREATE / BUILD TASKS
+    has_clarification = (
+        "clarification:" in request
+    )
+
+    # ---------------------------------
+    # CREATION REQUESTS
+    # ---------------------------------
 
     creation_keywords = [
         "create",
@@ -99,41 +110,77 @@ def validate_request(user_request):
         "design"
     ]
 
-    if any(keyword in request for keyword in creation_keywords):
+    if any(
+        keyword in request
+        for keyword in creation_keywords
+    ):
 
         understanding_score += 20
 
-        vague_creation_objects = [
-            "tracker",
-            "app",
-            "application",
-            "website",
-            "program",
-            "system",
-            "dashboard"
-        ]
+        if not has_clarification:
 
-        for item in vague_creation_objects:
+            vague_creation_objects = [
+                "tracker",
+                "app",
+                "application",
+                "website",
+                "program",
+                "system",
+                "dashboard",
+                "file"
+            ]
 
-            if item in request:
+            if any(
+                item in request
+                for item in vague_creation_objects
+            ):
 
                 clarification_questions.append(
-                    f"What should the {item} specifically do?"
+                    "What should it specifically do or be used for?"
                 )
 
-                break
+    # ---------------------------------
+    # PURCHASE REQUESTS
+    # ---------------------------------
 
-    # RECOMMENDATION TASKS
-
-    elif "recommend" in request or "best" in request:
+    elif any(
+        keyword in request
+        for keyword in [
+            "buy",
+            "buying",
+            "purchase",
+            "purchasing"
+        ]
+    ):
 
         understanding_score += 20
 
-        clarification_questions.append(
-            "What will you primarily use it for?"
-        )
+        if not has_clarification:
 
-    # EXPLANATION TASKS
+            clarification_questions.append(
+                "What will you primarily use it for?"
+            )
+
+    # ---------------------------------
+    # RECOMMENDATION REQUESTS
+    # ---------------------------------
+
+    elif (
+        "recommend" in request
+        or "best" in request
+    ):
+
+        understanding_score += 20
+
+        if not has_clarification:
+
+            clarification_questions.append(
+                "What will you primarily use it for?"
+            )
+
+    # ---------------------------------
+    # EXPLANATION REQUESTS
+    # ---------------------------------
 
     elif (
         "explain" in request
@@ -152,7 +199,7 @@ def validate_request(user_request):
     )
 
     # ---------------------------------
-    # DECISION
+    # FINAL DECISION
     # ---------------------------------
 
     needs_clarification = (
