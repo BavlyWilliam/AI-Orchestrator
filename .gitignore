@@ -3,3 +3,9 @@ __pycache__/
 *.pyc
 .env
 orchestrator.db
+# SQLite database
+orchestrator.db
+
+# SQLite temporary files
+orchestrator.db-shm
+orchestrator.db-wal
