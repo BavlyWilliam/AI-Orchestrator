@@ -25,8 +25,12 @@ class RequestAnalysis(BaseModel):
 
     understanding_score: int = Field(
         description=(
-            "How well the user's request is "
-            "understood, from 0 to 100."
+            "How actionable and sufficiently "
+            "specified the user's request is for "
+            "the orchestration system, from 0 to 100. "
+            "A non-request, dismissal, greeting, "
+            "or meaningless input should receive "
+            "a low score."
         ),
         ge=0,
         le=100
@@ -42,9 +46,11 @@ class RequestAnalysis(BaseModel):
 
     clarification_question: str | None = Field(
         description=(
-            "The single most important question "
-            "to ask if clarification is needed. "
-            "Use null when clarification is not needed."
+            "Ask exactly one focused question that "
+            "collects the single most important missing "
+            "piece of information. Do not combine "
+            "multiple questions. Use null when "
+            "clarification is not needed."
         )
     )
 
@@ -71,9 +77,9 @@ class RequestAnalysis(BaseModel):
         "complex"
     ] = Field(
         description=(
-            "Estimated complexity based on reasoning "
-            "difficulty, requirements, and number "
-            "of steps."
+            "Estimated complexity based on technical "
+            "difficulty, reasoning requirements, "
+            "requirements, and number of steps."
         )
     )
 
@@ -88,7 +94,7 @@ class RequestAnalysis(BaseModel):
     ] = Field(
         description=(
             "Prompt components that are meaningfully "
-            "missing and would improve the request."
+            "missing and could improve the request."
         )
     )
 
@@ -107,7 +113,7 @@ class RequestAnalysis(BaseModel):
 def get_client():
     """
     Create a Gemini client using the API key
-    stored in the environment.
+    stored in the .env file.
     """
 
     api_key = os.getenv("GEMINI_API_KEY")
@@ -131,15 +137,15 @@ def analyze_request(user_request):
     """
     Analyze a user request using Gemini.
 
-    Gemini returns a structured response
-    matching the RequestAnalysis schema.
+    Returns:
+        RequestAnalysis:
+            A structured analysis of the request.
     """
 
-    if not isinstance(
-        user_request,
-        str
-    ) or not user_request.strip():
-
+    if (
+        not isinstance(user_request, str)
+        or not user_request.strip()
+    ):
         raise ValueError(
             "user_request must be a "
             "non-empty string."
@@ -148,19 +154,19 @@ def analyze_request(user_request):
     client = get_client()
 
     analysis_prompt = f"""
-You are the request analysis component of
-an AI orchestration system.
+You are the request analysis component of an AI
+orchestration system.
 
-Analyze the user's request and determine:
+Analyze the user's input and determine:
 
-1. How well you understand the user's intent.
+1. How actionable and sufficiently specified the
+   request is.
 2. Whether clarification is genuinely necessary.
-3. The single most important clarification
-   question if one is required.
+3. The single most important clarification question
+   if clarification is required.
 4. The primary task category.
-5. The complexity.
-6. Which prompt components are meaningfully
-   missing:
+5. The estimated complexity.
+6. Which prompt components are meaningfully missing:
    - context
    - role
    - task
@@ -170,21 +176,48 @@ Analyze the user's request and determine:
 
 Important rules:
 
+- Understanding score means how actionable and
+  sufficiently specified the input is as a request
+  that the orchestration system can process.
+
+- Do not give a high understanding score simply
+  because you understand the meaning of the input.
+
+- Greetings, dismissals, insults without a request,
+  meaningless input, or statements with no actionable
+  task should receive a low understanding score.
+
 - Do not ask for information that is unnecessary
   to produce a useful answer.
+
 - Broad requests can still be valid requests.
-- Prefer reasonable assumptions when they would
-  not materially change the result.
-- Ask a clarification question only when missing
-  information would materially affect the result.
-- Return only one clarification question.
+
+- Prefer reasonable assumptions when they would not
+  materially change the result.
+
+- Ask for clarification only when missing information
+  would materially affect the result.
+
+- Ask exactly one focused clarification question.
+
+- A clarification question must request only ONE
+  missing piece of information.
+
+- Do not combine multiple questions or ask for
+  multiple pieces of information in one question.
+
+- Use null for clarification_question when
+  needs_clarification is false.
+
 - Do not treat words such as "no", "nothing",
   "stop", or similar words as cancellation commands.
   Analyze their meaning in context.
-- Do not rely on keyword matching.
-- Judge the meaning of the complete request.
 
-User request:
+- Do not rely on keyword matching.
+
+- Judge the meaning of the complete input.
+
+User input:
 
 {user_request}
 """
