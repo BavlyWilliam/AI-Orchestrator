@@ -74,7 +74,7 @@ The orchestration process moves from understanding the user's request to evaluat
 
 ## Artificial Analysis Leaderboard
 
-![Artificial Analysis Leaderboard](docs/Screenshots/Artificial%20Analysis%20Leaderboard.png)
+![Artificial Analysis Leaderboard](docs/Screenshots/Artifical analysis Leaderboard.png)
 
 ---
 
