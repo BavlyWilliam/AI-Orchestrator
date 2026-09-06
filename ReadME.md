@@ -27,7 +27,6 @@ The objective is to recommend the **most suitable model for the specific request
 # How It Works
 
 ![AI-Orchestrator Architecture](docs/architecture.png)
-
 The orchestration process moves from understanding the user's request to evaluating suitable AI models and storing the resulting interaction.
 
 ---
@@ -36,37 +35,37 @@ The orchestration process moves from understanding the user's request to evaluat
 
 ## 1. Project Folder Architecture
 
-![Folder Architecture](docs/Screenshots/Folder%20Architecture.png)
+![Folder Architecture](docs/Screenshots/folder-architecture.png)
 
 ---
 
 ## 2. Request Analysis and Enhanced Prompt
 
-![Analysis and Enhanced Prompt](docs/Screenshots/Analysis%20and%20Enhanced%20Prompt.png)
+![Analysis and Enhanced Prompt](docs/Screenshots/analysis-and-enhanced-prompt.png)
 
 ---
 
 ## 3. Prompt Scoring
 
-![Prompt Scoring](docs/Screenshots/Prompt%20Scoring.png)
+![Prompt Scoring](docs/Screenshots/prompt-scoring.png)
 
 ---
 
 ## 4. LLM Recommendation
 
-![LLM Recommendation](docs/Screenshots/LLM%20Recommendation.png)
+![LLM Recommendation](docs/Screenshots/llm-recommendation.png)
 
 ---
 
 ## 5. Database Interactions
 
-![Database Interactions](docs/Screenshots/Database%20Interactions.png)
+![Database Interactions](docs/Screenshots/database-interactions.png)
 
 ---
 
 ## 6. Database Requests
 
-![Database Requests](docs/Screenshots/Database%20Requests.png)
+![Database Requests](docs/Screenshots/database-requests.png)
 
 ---
 
@@ -74,13 +73,13 @@ The orchestration process moves from understanding the user's request to evaluat
 
 ## Artificial Analysis Leaderboard
 
-![Artificial Analysis Leaderboard](docs/Screenshots/Artifical analysis Leaderboard.png)
+![Artificial Analysis Leaderboard](docs/Screenshots/artificial-analysis-leaderboard.png)
 
 ---
 
 ## AI vs Rate Limits
 
-![AI vs Rate Limits](docs/Screenshots/AI%20vs%20Rate%20limits.png)
+![AI vs Rate Limits](docs/Screenshots/ai-rate-limits.png)
 
 ---
 
@@ -151,16 +150,15 @@ AI-Orchestrator/
 │
 ├── docs/
 │   └── Screenshots/
-│       ├── Analysis and Enhanced Prompt.png
-│       ├── AI vs Rate limits.png
-│       ├── Artificial Analysis Leaderboard.png
-│       ├── Database Interactions.png
-│       ├── Database Requests.png
-│       ├── Folder Architecture.png
-│       ├── LLM Recommendation.png
+│       ├── analysis-and-enhanced-prompt.png
+│       ├── ai-rate-limits.png
+│       ├── artificial-analysis-leaderboard.png
+│       ├── database-interactions.png
+│       ├── database-requests.png
+│       ├── folder-architecture.png
+│       ├── llm-recommendation.png
 │       ├── Other Screenshots.png
-│       ├── Prompt Scoring.png
-│       └── architecture.png
+│       └── prompt-scoring.png
 │
 ├── Knowledge/
 │   └── general_sop.md
