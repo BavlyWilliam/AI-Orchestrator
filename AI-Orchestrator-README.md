@@ -26,7 +26,7 @@ AI-Orchestrator is designed to reduce that guesswork by analyzing what the user 
 
 ## How It Works
 
-![AI-Orchestrator Architecture](docs/architecture.png)
+![AI-Orchestrator Architecture](Screenshots/architecture.png)
 
 The orchestration pipeline moves from understanding the user's request to producing an informed recommendation while keeping each stage modular and understandable.
 
@@ -291,12 +291,8 @@ AI-Orchestrator/
 ├── database.py
 ├── validator.py
 │
-├── docs/
-│   ├── architecture.png
-│   └── screenshots/
-│       ├── request-analysis.png
-│       ├── prompt-enhancement.png
-│       └── model-recommendation.png
+└── Screenshots/
+	└── architecture.png
 │
 ├── README.md
 ├── LICENSE
