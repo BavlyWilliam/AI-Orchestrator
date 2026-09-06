@@ -1,11 +1,19 @@
-from validator import validate_request
+from request_analyzer import analyze_request
+
+from prompt_enhancer import enhance_prompt
 
 from prompt_scorer import (
     score_prompt,
     get_missing_components
 )
 
-from prompt_enhancer import enhance_prompt
+from model_recommender import (
+    recommend_models
+)
+
+from benchmark_provider import (
+    fetch_benchmark_data
+)
 
 from database import (
     initialize_database,
@@ -42,14 +50,17 @@ def get_user_request():
         ).strip()
 
         if not user_request:
+
             print(
                 "\nPlease enter a request.\n"
             )
+
             continue
 
-        # Exit commands only apply here,
-        # when entering the original request.
+        # Exit commands only apply when
+        # entering the original request.
         if is_exit_response(user_request):
+
             return None
 
         return user_request
@@ -72,6 +83,72 @@ def is_exit_response(answer):
 
 
 # =====================================
+# DISPLAY REQUEST ANALYSIS
+# =====================================
+
+def display_analysis(analysis_result):
+    """
+    Display the Gemini analysis in a
+    readable format.
+    """
+
+    print(
+        "\n--- Gemini Request Analysis ---"
+    )
+
+    print(
+        f"Understanding Score: "
+        f"{analysis_result.understanding_score}/100"
+    )
+
+    print(
+        f"Task Category: "
+        f"{analysis_result.task_category}"
+    )
+
+    print(
+        f"Complexity: "
+        f"{analysis_result.complexity}"
+    )
+
+    # =============================
+    # MISSING COMPONENTS
+    # =============================
+
+    if analysis_result.missing_components:
+
+        print(
+            "\nMissing Components:"
+        )
+
+        for component in (
+            analysis_result.missing_components
+        ):
+
+            print(
+                f"- {component.capitalize()}"
+            )
+
+    else:
+
+        print(
+            "\nMissing Components: None"
+        )
+
+    # =============================
+    # ANALYSIS REASON
+    # =============================
+
+    print(
+        "\nAnalysis:"
+    )
+
+    print(
+        analysis_result.analysis_reason
+    )
+
+
+# =====================================
 # UNDERSTANDING CLARIFICATIONS
 # =====================================
 
@@ -80,13 +157,17 @@ def collect_understanding_clarifications(
     request_id
 ):
     """
-    Ask clarification questions when the
-    system cannot understand the user's
-    request.
+    Analyze the request using Gemini.
+
+    If clarification is genuinely necessary,
+    ask one focused clarification question.
+
+    The updated request is then analyzed
+    again.
 
     Returns:
         final_request
-        validation_result
+        analysis_result
     """
 
     current_request = user_request
@@ -96,148 +177,212 @@ def collect_understanding_clarifications(
 
     while attempt < max_attempts:
 
-        validation_result = validate_request(
+        # =============================
+        # ANALYZE REQUEST WITH GEMINI
+        # =============================
+
+        analysis_result = analyze_request(
             current_request
         )
 
-        print(
-            "\n--- Request Validation ---"
-        )
-
-        print(
-            f"Understanding Score: "
-            f"{validation_result['understanding_score']}/100"
+        display_analysis(
+            analysis_result
         )
 
         # =============================
-        # REQUEST IS UNDERSTOOD
-        # =============================
-
-        if not validation_result[
-            "needs_clarification"
-        ]:
-
-            return (
-                current_request,
-                validation_result
-            )
-
-        # =============================
-        # REQUEST NEEDS CLARIFICATION
+        # SAVE ANALYSIS RESULTS
         # =============================
 
         update_request(
             request_id=request_id,
 
-            understanding_score=validation_result[
-                "understanding_score"
-            ],
+            understanding_score=(
+                analysis_result.understanding_score
+            ),
 
-            needs_clarification=True,
+            needs_clarification=(
+                analysis_result.needs_clarification
+            ),
+
+            task_category=(
+                analysis_result.task_category
+            )
+        )
+
+        # =============================
+        # NON-ACTIONABLE REQUEST
+        # =============================
+
+        if not analysis_result.is_actionable_request:
+
+            update_request(
+                request_id=request_id,
+
+                status="non_actionable"
+            )
+
+            print(
+                "\nI couldn't find an actionable "
+                "request to process."
+            )
+
+            return None, None
+
+        # =============================
+        # REQUEST IS READY
+        # =============================
+
+        if not analysis_result.needs_clarification:
+
+            return (
+                current_request,
+                analysis_result
+            )
+
+        # =============================
+        # CLARIFICATION REQUIRED
+        # =============================
+
+        question = (
+            analysis_result.clarification_question
+        )
+
+        # Safety check in case Gemini says
+        # clarification is needed but does
+        # not provide a question.
+        if not question:
+
+            update_request(
+                request_id=request_id,
+
+                status="analysis_error"
+            )
+
+            print(
+                "\nThe analyzer indicated that "
+                "clarification is needed but did "
+                "not provide a question."
+            )
+
+            return None, None
+
+        # =============================
+        # UPDATE DATABASE STATUS
+        # =============================
+
+        update_request(
+            request_id=request_id,
 
             status="needs_clarification"
         )
 
         print(
-            "\nI need more information "
-            "to understand your request."
+            "\nClarification Needed:"
         )
 
         print(
-            "\nClarification Questions:"
+            f"\n{question}"
         )
 
-        questions = validation_result[
-            "clarification_questions"
-        ]
+        # =============================
+        # SAVE QUESTION
+        # =============================
 
-        for question in questions:
+        save_interaction(
+            request_id=request_id,
 
-            # =========================
-            # SAVE QUESTION
-            # =========================
+            interaction_type=(
+                "clarification_question"
+            ),
 
-            save_interaction(
-                request_id=request_id,
+            content=question
+        )
 
-                interaction_type="understanding_question",
+        # =============================
+        # GET USER ANSWER
+        # =============================
 
-                content=question
-            )
+        answer = input(
+            "\n> "
+        ).strip()
 
-            answer = input(
-                f"\n{question}\n> "
-            ).strip()
+        # =============================
+        # USER CANCELS
+        # =============================
 
-            # =========================
-            # USER CANCELS
-            # =========================
-            #
-            # Only explicit cancellation
-            # commands are accepted.
-            #
-            # "no" is a valid answer and
-            # will NOT cancel the request.
-            # =========================
+        # "no" is NOT an exit command.
+        # It is treated as a valid answer.
 
-            if is_exit_response(answer):
-
-                save_interaction(
-                    request_id=request_id,
-
-                    interaction_type="cancellation",
-
-                    content=answer
-                )
-
-                update_request(
-                    request_id=request_id,
-
-                    status="cancelled"
-                )
-
-                print(
-                    "\nNo problem. "
-                    "Request cancelled."
-                )
-
-                return None, None
-
-            # =========================
-            # EMPTY ANSWER
-            # =========================
-
-            if not answer:
-
-                save_interaction(
-                    request_id=request_id,
-
-                    interaction_type="empty_answer",
-
-                    content="[No answer provided]"
-                )
-
-                print(
-                    "\nNo answer was provided."
-                )
-
-                continue
-
-            # =========================
-            # SAVE ANSWER
-            # =========================
+        if is_exit_response(answer):
 
             save_interaction(
                 request_id=request_id,
 
-                interaction_type="understanding_answer",
+                interaction_type="cancellation",
 
                 content=answer
             )
 
-            current_request += (
-                f"\nClarification: {answer}"
+            update_request(
+                request_id=request_id,
+
+                status="cancelled"
             )
+
+            print(
+                "\nNo problem. "
+                "Request cancelled."
+            )
+
+            return None, None
+
+        # =============================
+        # EMPTY ANSWER
+        # =============================
+
+        if not answer:
+
+            save_interaction(
+                request_id=request_id,
+
+                interaction_type="empty_answer",
+
+                content="[No answer provided]"
+            )
+
+            print(
+                "\nNo answer was provided."
+            )
+
+            continue
+
+        # =============================
+        # SAVE ANSWER
+        # =============================
+
+        save_interaction(
+            request_id=request_id,
+
+            interaction_type=(
+                "clarification_answer"
+            ),
+
+            content=answer
+        )
+
+        # =============================
+        # ADD ANSWER TO REQUEST CONTEXT
+        # =============================
+
+        current_request += (
+            f"\n\nClarification Question: "
+            f"{question}"
+        )
+
+        current_request += (
+            f"\nClarification Answer: "
+            f"{answer}"
+        )
 
         attempt += 1
 
@@ -246,23 +391,183 @@ def collect_understanding_clarifications(
             "Analyzing your updated request..."
         )
 
-    # =============================
-    # MAX ATTEMPTS REACHED
-    # =============================
+    # =================================
+    # FINAL ANALYSIS AFTER MAX ATTEMPTS
+    # =================================
 
-    update_request(
-        request_id=request_id,
+    final_analysis = analyze_request(
+        current_request
+    )
 
-        status="failed_understanding"
+    display_analysis(
+        final_analysis
+    )
+
+    # =================================
+    # STILL NEEDS CLARIFICATION
+    # =================================
+
+    if final_analysis.needs_clarification:
+
+        update_request(
+            request_id=request_id,
+
+            understanding_score=(
+                final_analysis.understanding_score
+            ),
+
+            needs_clarification=True,
+
+            task_category=(
+                final_analysis.task_category
+            ),
+
+            status="failed_understanding"
+        )
+
+        print(
+            "\nI still need more information "
+            "to process this request."
+        )
+
+        return None, None
+
+    # =================================
+    # FINAL REQUEST READY
+    # =================================
+
+    return (
+        current_request,
+        final_analysis
+    )
+
+
+# =====================================
+# DISPLAY PROMPT SCORE
+# =====================================
+
+def display_prompt_score(scoring_result):
+    """
+    Display the enhanced prompt's component
+    score in a readable format.
+    """
+
+    print(
+        "\n--- Prompt Quality Score ---\n"
     )
 
     print(
-        "\nI still don't have enough "
-        "information to understand "
-        "your request."
+        f"Total Score: "
+        f"{scoring_result['total_score']}/100"
     )
 
-    return None, None
+    missing_components = get_missing_components(
+        scoring_result
+    )
+
+    if missing_components:
+
+        print(
+            "\nComponents Not Detected:"
+        )
+
+        for component in missing_components:
+
+            print(
+                f"- {component.capitalize()}"
+            )
+
+    else:
+
+        print(
+            "\nAll components detected."
+        )
+
+
+# =====================================
+# DISPLAY RECOMMENDATIONS
+# =====================================
+
+def display_recommendations(
+    recommendation_result,
+    used_benchmark_data
+):
+    """
+    Display the AI model recommendation
+    results in a readable format.
+    """
+
+    print(
+        "\n--- AI Recommendations ---"
+    )
+
+    print(
+        "\nRequest Analysis:"
+    )
+
+    analysis = recommendation_result[
+        "request_analysis"
+    ]
+
+    print(
+        f"Primary Task: "
+        f"{analysis['primary_task']}"
+    )
+
+    print(
+        f"Complexity: "
+        f"{analysis['complexity']}"
+    )
+
+    print(
+        "\nRecommendations:"
+    )
+
+    for recommendation in (
+        recommendation_result[
+            "recommendations"
+        ]
+    ):
+
+        print(
+            f"\n{recommendation['name']}"
+        )
+
+        print(
+            f"Compatibility: "
+            f"{recommendation['compatibility_score']}/100"
+        )
+
+        print(
+            f"Reason: "
+            f"{recommendation['reason']}"
+        )
+
+    best = recommendation_result[
+        "best_recommendation"
+    ]
+
+    print(
+        "\n--- Best Recommendation ---"
+    )
+
+    print(
+        f"{best['name']} "
+        f"({best['compatibility_score']}/100)"
+    )
+
+    print(
+        best["reason"]
+    )
+
+    if used_benchmark_data:
+
+        print(
+            "\n(Benchmark data via Artificial Analysis "
+            "— https://artificialanalysis.ai/)"
+        )
+
+    return best
 
 
 # =====================================
@@ -283,8 +588,10 @@ def main():
 
     original_request = get_user_request()
 
-    # User cancelled before creating
-    # a database request.
+    # =================================
+    # USER CANCELLED
+    # =================================
+
     if original_request is None:
 
         print(
@@ -315,123 +622,75 @@ def main():
 
     # =================================
     # STEP 1
-    # UNDERSTANDING VALIDATION
+    # GEMINI REQUEST ANALYSIS
     # =================================
 
-    final_request, validation_result = (
-        collect_understanding_clarifications(
-            original_request,
-            request_id
+    try:
+
+        final_request, analysis_result = (
+            collect_understanding_clarifications(
+                original_request,
+                request_id
+            )
         )
-    )
+
+    except Exception as error:
+
+        update_request(
+            request_id=request_id,
+
+            status="error"
+        )
+
+        print(
+            "\nAn error occurred while "
+            "analyzing the request:"
+        )
+
+        print(
+            error
+        )
+
+        return
 
     # =================================
-    # STOP IF CANCELLED
+    # STOP IF REQUEST WAS NOT COMPLETED
     # =================================
 
     if final_request is None:
+
         return
 
     # =================================
     # STEP 2
-    # SCORE ORIGINAL REQUEST
-    # =================================
-
-    original_scoring_result = (
-        score_prompt(
-            original_request
-        )
-    )
-
-    print(
-        "\n--- Original Prompt Score ---"
-    )
-
-    print(
-        f"Total Score: "
-        f"{original_scoring_result['total_score']}/100"
-    )
-
-    for category, score in (
-        original_scoring_result[
-            "scores"
-        ].items()
-    ):
-
-        print(
-            f"{category.capitalize()}: "
-            f"{score}/20"
-        )
-
-    # =================================
-    # STEP 3
-    # SCORE FINAL REQUEST
-    # =================================
-
-    final_scoring_result = (
-        score_prompt(
-            final_request
-        )
-    )
-
-    missing_components = (
-        get_missing_components(
-            final_scoring_result
-        )
-    )
-
-    print(
-        "\n--- Final Prompt Quality Analysis ---"
-    )
-
-    print(
-        f"Prompt Score: "
-        f"{final_scoring_result['total_score']}/100"
-    )
-
-    for category, score in (
-        final_scoring_result[
-            "scores"
-        ].items()
-    ):
-
-        print(
-            f"{category.capitalize()}: "
-            f"{score}/20"
-        )
-
-    # =================================
-    # SHOW MISSING COMPONENTS
-    # =================================
-
-    if missing_components:
-
-        print(
-            "\nMissing Components:"
-        )
-
-        for component in missing_components:
-
-            print(
-                f"- {component.capitalize()}"
-            )
-
-    else:
-
-        print(
-            "\nAll prompt components "
-            "were detected."
-        )
-
-    # =================================
-    # STEP 4
     # ENHANCE PROMPT
     # =================================
 
-    enhanced_prompt = enhance_prompt(
-        user_request=final_request,
-        missing_components=missing_components
-    )
+    try:
+
+        enhanced_prompt = enhance_prompt(
+            final_request,
+            analysis_result
+        )
+
+    except Exception as error:
+
+        update_request(
+            request_id=request_id,
+
+            status="error"
+        )
+
+        print(
+            "\nAn error occurred while "
+            "enhancing the prompt:"
+        )
+
+        print(
+            error
+        )
+
+        return
 
     print(
         "\n--- Enhanced Prompt ---\n"
@@ -442,8 +701,8 @@ def main():
     )
 
     # =================================
-    # STEP 5
-    # UPDATE DATABASE
+    # STEP 3
+    # SAVE ANALYSIS + ENHANCEMENT
     # =================================
 
     update_request(
@@ -452,17 +711,94 @@ def main():
 
         final_request=final_request,
 
-        understanding_score=validation_result[
-            "understanding_score"
-        ],
+        understanding_score=(
+            analysis_result.understanding_score
+        ),
 
-        needs_clarification=False,
+        needs_clarification=(
+            analysis_result.needs_clarification
+        ),
 
-        prompt_score=final_scoring_result[
-            "total_score"
-        ],
+        task_category=(
+            analysis_result.task_category
+        ),
 
         enhanced_prompt=enhanced_prompt,
+
+        status="enhanced"
+    )
+
+    # =================================
+    # STEP 4
+    # SCORE THE ENHANCED PROMPT
+    # =================================
+
+    scoring_result = score_prompt(
+        enhanced_prompt
+    )
+
+    update_request(
+        request_id=request_id,
+
+        prompt_score=(
+            scoring_result["total_score"]
+        )
+    )
+
+    display_prompt_score(
+        scoring_result
+    )
+
+    # =================================
+    # STEP 5
+    # AI MODEL RECOMMENDATION
+    # =================================
+
+    try:
+
+        benchmark_data = fetch_benchmark_data()
+
+        recommendation_result = (
+            recommend_models(
+                final_request,
+                benchmark_data
+            )
+        )
+
+    except Exception as error:
+
+        update_request(
+            request_id=request_id,
+
+            status="error"
+        )
+
+        print(
+            "\nAn error occurred while "
+            "generating AI model recommendations:"
+        )
+
+        print(
+            error
+        )
+
+        return
+
+    best = display_recommendations(
+        recommendation_result,
+        benchmark_data
+    )
+
+    # =================================
+    # SAVE RECOMMENDATION + COMPLETE
+    # =================================
+
+    update_request(
+        request_id=request_id,
+
+        recommended_llm=best["name"],
+
+        recommendation_reason=best["reason"],
 
         status="completed"
     )

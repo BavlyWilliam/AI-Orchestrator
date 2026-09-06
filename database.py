@@ -1,5 +1,6 @@
 import sqlite3
 
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
@@ -22,10 +23,18 @@ DATABASE_PATH = (
 # CONNECTION
 # =====================================
 
+@contextmanager
 def get_connection():
     """
-    Create and return a connection to
-    the SQLite database.
+    Provide a database connection as a context manager.
+
+    Commits on success, rolls back on error, and always closes
+    the connection afterwards. Plain sqlite3.Connection objects
+    only commit/rollback when used as a context manager - they
+    never close themselves, which leaks a connection every time
+    this used to be called directly. Wrapping it here means every
+    existing "with get_connection() as connection:" call site
+    keeps working exactly as before, just without the leak.
     """
 
     connection = sqlite3.connect(
@@ -36,7 +45,21 @@ def get_connection():
         "PRAGMA foreign_keys = ON"
     )
 
-    return connection
+    try:
+
+        yield connection
+
+        connection.commit()
+
+    except Exception:
+
+        connection.rollback()
+
+        raise
+
+    finally:
+
+        connection.close()
 
 
 # =====================================

@@ -23,14 +23,22 @@ class RequestAnalysis(BaseModel):
     after analyzing a user request.
     """
 
+    is_actionable_request: bool = Field(
+        description=(
+            "Whether the user's input contains a real "
+            "task, goal, question, or request that the "
+            "orchestration system can process. Greetings, "
+            "dismissals, insults without a request, and "
+            "meaningless input should be false."
+        )
+    )
+
     understanding_score: int = Field(
         description=(
-            "How actionable and sufficiently "
-            "specified the user's request is for "
-            "the orchestration system, from 0 to 100. "
-            "A non-request, dismissal, greeting, "
-            "or meaningless input should receive "
-            "a low score."
+            "How actionable and sufficiently specified "
+            "the user's request is for the orchestration "
+            "system, from 0 to 100. A non-actionable "
+            "input should receive a very low score."
         ),
         ge=0,
         le=100
@@ -38,19 +46,18 @@ class RequestAnalysis(BaseModel):
 
     needs_clarification: bool = Field(
         description=(
-            "True only when missing information "
-            "materially affects the ability to "
-            "complete the user's request."
+            "True only when missing information materially "
+            "affects the ability to complete the user's "
+            "request usefully."
         )
     )
 
     clarification_question: str | None = Field(
         description=(
-            "Ask exactly one focused question that "
-            "collects the single most important missing "
-            "piece of information. Do not combine "
-            "multiple questions. Use null when "
-            "clarification is not needed."
+            "Ask exactly one focused question that collects "
+            "the single most important missing piece of "
+            "information. Do not combine multiple questions. "
+            "Use null when clarification is not needed."
         )
     )
 
@@ -93,15 +100,19 @@ class RequestAnalysis(BaseModel):
         ]
     ] = Field(
         description=(
-            "Prompt components that are meaningfully "
-            "missing and could improve the request."
+            "Components that are meaningfully missing from "
+            "the request. Do not mark a component as missing "
+            "just because it is absent from the wording. "
+            "Only include it when its absence materially "
+            "limits understanding or execution."
         )
     )
 
     analysis_reason: str = Field(
         description=(
-            "Brief explanation of why the request "
-            "does or does not need clarification."
+            "Brief explanation of why the request is or is "
+            "not actionable and why clarification is or is "
+            "not needed."
         )
     )
 
@@ -159,63 +170,134 @@ orchestration system.
 
 Analyze the user's input and determine:
 
-1. How actionable and sufficiently specified the
-   request is.
-2. Whether clarification is genuinely necessary.
-3. The single most important clarification question
+1. Whether the input contains an actionable request.
+2. How actionable and sufficiently specified the request is.
+3. Whether clarification is genuinely necessary.
+4. The single most important clarification question,
    if clarification is required.
-4. The primary task category.
-5. The estimated complexity.
-6. Which prompt components are meaningfully missing:
-   - context
-   - role
-   - task
-   - output
-   - format
-7. A brief explanation of your reasoning.
+5. The primary task category.
+6. The estimated complexity.
+7. Which components are meaningfully missing.
+8. A brief explanation of your reasoning.
 
-Important rules:
+Important definitions:
 
-- Understanding score means how actionable and
-  sufficiently specified the input is as a request
-  that the orchestration system can process.
+ACTIONABLE REQUEST:
 
-- Do not give a high understanding score simply
-  because you understand the meaning of the input.
+An actionable request contains a meaningful task,
+goal, question, instruction, or problem that an AI
+system can reasonably attempt to help with.
 
-- Greetings, dismissals, insults without a request,
-  meaningless input, or statements with no actionable
-  task should receive a low understanding score.
+Examples:
 
-- Do not ask for information that is unnecessary
-  to produce a useful answer.
+"Create an Access database"
+→ actionable
 
-- Broad requests can still be valid requests.
+"Help me debug my Python code"
+→ actionable
 
-- Prefer reasonable assumptions when they would not
-  materially change the result.
+"I want to buy a laptop"
+→ actionable
 
-- Ask for clarification only when missing information
-  would materially affect the result.
+"Fuck off"
+→ not actionable
 
-- Ask exactly one focused clarification question.
+"Hello"
+→ not actionable unless it includes a request
 
-- A clarification question must request only ONE
-  missing piece of information.
+"Nothing"
+→ usually not actionable when used as the user's
+entire input
 
-- Do not combine multiple questions or ask for
-  multiple pieces of information in one question.
+UNDERSTANDING SCORE:
+
+The understanding score measures how ready the
+request is for useful processing.
+
+Do not give a high score simply because you
+understand what the user means.
+
+Examples:
+
+"Create an Access database"
+→ actionable but underspecified
+
+"Create an Access database for managing inventory"
+→ more sufficiently specified
+
+A non-actionable input should receive a very
+low score.
+
+CLARIFICATION RULES:
+
+- Do not ask for information unnecessarily.
+
+- Broad requests can still be valid and useful.
+
+- Prefer reasonable assumptions when they would
+  not materially change the result.
+
+- Ask for clarification only when missing
+  information would materially affect the result.
+
+- Ask exactly ONE focused clarification question.
+
+- Ask for the SINGLE most important missing piece
+  of information.
+
+- Do not ask artificial prompt-engineering questions
+  such as:
+    "What format do you want?"
+    "What role should the AI take?"
+    "What output do you want?"
+
+  unless the user's actual task genuinely requires
+  that information.
+
+- Do not ask multiple questions in one sentence.
 
 - Use null for clarification_question when
   needs_clarification is false.
 
-- Do not treat words such as "no", "nothing",
-  "stop", or similar words as cancellation commands.
-  Analyze their meaning in context.
+MISSING COMPONENTS:
+
+Possible components are:
+
+- context
+- role
+- task
+- output
+- format
+
+Only mark a component as missing when it meaningfully
+affects understanding or execution.
+
+Do NOT mechanically mark role or format as missing
+just because the user did not explicitly provide them.
+
+For example:
+
+"Write an email apologizing for missing a meeting"
+
+This does not necessarily need:
+- role
+- format
+- clarification
+
+The system can reasonably infer an appropriate format.
+
+GENERAL RULES:
 
 - Do not rely on keyword matching.
 
 - Judge the meaning of the complete input.
+
+- Do not treat words such as "no", "nothing",
+  "stop", or similar words as cancellation commands.
+
+- Analyze their meaning in context.
+
+- Do not invent user requirements.
 
 User input:
 
