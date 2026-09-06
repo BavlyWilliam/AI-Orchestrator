@@ -26,7 +26,7 @@ The objective is to recommend the **most suitable model for the specific request
 
 # How It Works
 
-![AI-Orchestrator Architecture](docs/Screenshots/architecture.png)
+![AI-Orchestrator Architecture](docs/architecture.png)
 
 The orchestration process moves from understanding the user's request to evaluating suitable AI models and storing the resulting interaction.
 
